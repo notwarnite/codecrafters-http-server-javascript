@@ -3,7 +3,7 @@ const fs = require("fs").promises;
 const path = require("path");
 
 class HTTPServer {
-  constructor(port) {
+  constructor(port, directory) {
     this.port = port;
     this.directory = directory;
     this.server = net.createServer(this.handleConnection.bind(this));
@@ -101,5 +101,16 @@ class HTTPServer {
   }
 }
 
-const server = new HTTPServer(4221);
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const directoryIndex = args.indexOf("--directory");
+  if (directoryIndex !== -1 && directoryIndex < args.length - 1) {
+    return args[directoryIndex + 1];
+  }
+  return process.cwd();
+}
+
+const directory = parseArgs();
+console.log(`Serving files from directory: ${directory}`);
+const server = new HTTPServer(4221, directory);
 server.start();
