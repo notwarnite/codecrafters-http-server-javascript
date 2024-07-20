@@ -122,6 +122,8 @@ class HTTPServer {
     if (useGzip) {
       responseBody = zlib.gzipSync(responseBody);
       responseHeaders += "Content-Encoding: gzip\r\n";
+    } else {
+      responseBody = Buffer.from(responseBody);
     }
 
     const contentLength = Buffer.byteLength(responseBody);
