@@ -22,16 +22,17 @@ const server = net.createServer((socket) => {
     console.log(`Received User-Agent: ${userAgent}`);
 
     let response;
-    if (requestLine.includes("/user-agent")) {
-      const contentLength = Buffer.byteLength(userAgent, "utf8");
+    const path = requestLine.split(" ")[1];
 
-      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
-    } else if (requestLine.includes("/echo/")) {
-      const echoStr = requestLine.split(" ")[1].substring("/echo/".length);
+    if (path === "/") {
+      response = "HTTP/1.1 200 OK\r\n\r\n";
+    } else if (path.startsWith("/echo/")) {
+      const echoStr = path.substring("/echo/".length);
       const contentLength = Buffer.byteLength(echoStr, "utf8");
       response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${echoStr}`;
-    } else if (requestLine.includes("/")) {
-      response = "HTTP/1.1 200 OK\r\n\r\n";
+    } else if (path === "/user-agent") {
+      const contentLength = Buffer.byteLength(userAgent, "utf8");
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
     } else {
       response = "HTTP/1.1 404 Not Found\r\n\r\n";
     }
