@@ -1,64 +1,82 @@
 const net = require("net");
 
-console.log("Server starting...");
+class HTTPServer {
+  constructor(port) {
+    this.port = port;
+    this.server = net.createServer(this.handleConnection.bind(this));
+  }
 
-const server = net.createServer((socket) => {
-  let buffer = "";
+  start() {
+    this.server.listen(this.port, "localhost", () => {
+      console.log(`Server listening on port ${this.port}...`);
+    });
+  }
 
-  socket.on("data", (data) => {
-    buffer += data.toString();
+  handleConnection(socket) {
+    console.log("New connection established.");
+    let request = "";
 
-    const requestEndIndex = buffer.indexOf("\r\n\r\n");
-    while (requestEndIndex !== -1) {
-      const request = buffer.substring(0, requestEndIndex + "\r\n\r\n".length);
+    socket.on("data", (data) => {
+      request += data.toString();
+      if (request.includes("\r\n\r\n")) {
+        this.processRequest(socket, request);
+        request = "";
+      }
+    });
 
-      handleRequest(socket, request);
+    socket.on("close", () => {
+      console.log("Connection closed.");
+    });
 
-      buffer = buffer.substring(requestEndIndex + "\r\n\r\n".length);
+    socket.on("error", (error) => {
+      console.error("Socket error:", error);
+    });
+  }
 
-      requestEndIndex = buffer.indexOf("\r\n\r\n");
-    }
-  });
+  processRequest(socket, request) {
+    const { path, userAgent } = this.parseRequest(request);
+    const response = this.createResponse(path, userAgent);
+    this.sendResponse(socket, response);
+  }
 
-  socket.on("close", () => {
-    console.log("Connection closed.");
-  });
-});
+  parseRequest(request) {
+    const lines = request.split("\r\n");
+    const requestLine = lines[0];
+    const headers = lines.slice(1, -2);
 
-function handleRequest(socket, request) {
-  const lines = request.split("\r\n");
-  const requestLine = lines[0];
-  const headers = lines.slice(1, lines.length - 2);
+    const path = requestLine.split(" ")[1];
+    const userAgent =
+      headers
+        .find((header) => header.startsWith("User-Agent: "))
+        ?.substring("User-Agent: ".length) || "";
 
-  let userAgent = "";
-  for (let header of headers) {
-    if (header.startsWith("User-Agent: ")) {
-      userAgent = header.substring("User-Agent: ".length);
-      break;
+    console.log(`Received request for path: ${path}`);
+    console.log(`Received User-Agent: ${userAgent}`);
+
+    return { path, userAgent };
+  }
+
+  createResponse(path, userAgent) {
+    if (path === "/") {
+      return "HTTP/1.1 200 OK\r\n\r\n";
+    } else if (path.startsWith("/echo/")) {
+      const echoStr = path.substring("/echo/".length);
+      const contentLength = Buffer.byteLength(echoStr, "utf8");
+      return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${echoStr}`;
+    } else if (path === "/user-agent") {
+      const contentLength = Buffer.byteLength(userAgent, "utf8");
+      return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
+    } else {
+      return "HTTP/1.1 404 Not Found\r\n\r\n";
     }
   }
 
-  console.log(`Received User-Agent: ${userAgent}`);
-
-  let response;
-  const path = requestLine.split(" ")[1];
-
-  if (path === "/") {
-    response = "HTTP/1.1 200 OK\r\n\r\n";
-  } else if (path.startsWith("/echo/")) {
-    const echoStr = path.substring("/echo/".length);
-    const contentLength = Buffer.byteLength(echoStr, "utf8");
-    response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${echoStr}`;
-  } else if (path === "/user-agent") {
-    const contentLength = Buffer.byteLength(userAgent, "utf8");
-    response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
-  } else {
-    response = "HTTP/1.1 404 Not Found\r\n\r\n";
+  sendResponse(socket, response) {
+    socket.write(response, () => {
+      socket.end();
+    });
   }
-
-  socket.write(response);
 }
 
-server.listen(4221, "localhost", () => {
-  console.log("Server listening on port 4221...");
-});
+const server = new HTTPServer(4221);
+server.start();
