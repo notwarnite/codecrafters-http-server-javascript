@@ -17,13 +17,13 @@ class HTTPServer {
 
   handleConnection(socket) {
     console.log("New connection established.");
-    let request = "";
+    let request = Buffer.alloc(0);
 
     socket.on("data", (data) => {
-      request += data.toString();
+      request = Buffer.concat([request, data]);
       if (this.isCompleteRequest(request)) {
         this.processRequest(socket, request);
-        request = "";
+        request = Buffer.alloc(0);
       }
     });
 
@@ -36,19 +36,20 @@ class HTTPServer {
     });
   }
 
-  isCompleteRequest(request) {
-    const [headers, body] = request.split("\r\n\r\n");
-    if (!headers || !body) return false;
+  isCompleteRequest(buffer) {
+    const str = buffer.toString();
+    if (!str.includes("\r\n\r\n")) return false;
 
+    const [headers, body] = str.split("\r\n\r\n");
     const contentLengthMatch = headers.match(/Content-Length: (\d+)/);
-    if (!contentLengthMatch) return request.includes("\r\n\r\n");
+    if (!contentLengthMatch) return true;
 
-    const contentLength = parseInt(contentLengthMatch[1], 10);
+    const contentLength = parseInt(contentLengthMatch[1]);
     return body.length >= contentLength;
   }
 
-  async processRequest(socket, request) {
-    const { method, path, headers, body } = this.parseRequest(request);
+  async processRequest(socket, requestBuffer) {
+    const { method, path, headers, body } = this.parseRequest(requestBuffer);
     try {
       const response = await this.createResponse(method, path, headers, body);
       this.sendResponse(socket, response);
@@ -58,18 +59,23 @@ class HTTPServer {
     }
   }
 
-  parseRequest(request) {
+  parseRequest(requestBuffer) {
+    const request = requestBuffer.toString();
     const [requestLine, ...rest] = request.split("\r\n");
     const [method, path] = requestLine.split(" ");
-    const [headersPart, body] = rest.join("\r\n").split("\r\n\r\n");
-    const headers = Object.fromEntries(
-      headersPart.split("\r\n").map((line) => {
-        const [key, value] = line.split(": ");
-        return [key.toLowerCase(), value];
-      })
-    );
+
+    const headers = {};
+    let bodyStart = rest.indexOf("");
+    for (let i = 0; i < bodyStart; i++) {
+      const [key, value] = rest[i].split(": ");
+      headers[key.toLowerCase()] = value;
+    }
+
+    const body = rest.slice(bodyStart + 1).join("\r\n");
 
     console.log(`Received ${method} request for path: ${path}`);
+    console.log(`Received User-Agent: ${headers["user-agent"] || ""}`);
+
     return { method, path, headers, body };
   }
 
@@ -89,7 +95,7 @@ class HTTPServer {
         return await this.handleFileRequest(path);
       }
     } else if (method === "POST" && path.startsWith("/files/")) {
-      return await this.handleFileCreation(path, body);
+      return await this.handleFileUpload(path, body);
     }
 
     return "HTTP/1.1 404 Not Found\r\n\r\n";
@@ -113,15 +119,15 @@ class HTTPServer {
     }
   }
 
-  async handleFileCreation(requestPath, content) {
+  async handleFileUpload(requestPath, body) {
     const filename = requestPath.substring("/files/".length);
     const filePath = path.join(this.directory, filename);
 
     try {
-      await fs.writeFile(filePath, content);
+      await fs.writeFile(filePath, body);
       return "HTTP/1.1 201 Created\r\n\r\n";
     } catch (error) {
-      console.error("Error creating file:", error);
+      console.error("Error writing file:", error);
       return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
     }
   }
