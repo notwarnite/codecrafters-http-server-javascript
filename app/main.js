@@ -70,7 +70,7 @@ class HTTPServer {
       const contentLength = Buffer.byteLength(userAgent, "utf8");
       return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
     } else if (path.startsWith("/files/")) {
-      return await this.handleFileRequest(requestPath);
+      return await this.handleFileRequest(path);
     } else {
       return "HTTP/1.1 404 Not Found\r\n\r\n";
     }
