@@ -16,7 +16,14 @@ const server = net.createServer((socket) => {
     console.log(`Received request: ${method} ${path}`);
 
     let response;
-    if (path.startsWith("/echo/")) {
+    if (path.startsWith("/user-agent")) {
+      const header = lines[1];
+      const userAgent = header.split(":")[1].trim();
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(
+        userAgent,
+        "utf8"
+      )}\r\n\r\n${userAgent}`;
+    } else if (path.startsWith("/echo/")) {
       const echoStr = path.substring("/echo/".length);
       const contentLength = Buffer.byteLength(echoStr, "utf8");
 
