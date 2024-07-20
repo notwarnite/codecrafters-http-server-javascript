@@ -130,12 +130,18 @@ class HTTPServer {
     const contentLength = responseBody.length;
     responseHeaders += `Content-Length: ${contentLength}\r\n`;
 
-    // Convert responseBody to a string if it's not already
-    responseBody = responseBody.toString("binary");
-
-    return `HTTP/1.1 ${statusCode} ${this.getStatusText(
+    // Convert headers to a single string
+    const headersString = `HTTP/1.1 ${statusCode} ${this.getStatusText(
       statusCode
-    )}\r\n${responseHeaders}\r\n\r\n${responseBody}`;
+    )}\r\n${responseHeaders}\r\n`;
+
+    // Create the final response by concatenating the headers and the body
+    const response = Buffer.concat([
+      Buffer.from(headersString, "utf8"),
+      responseBody,
+    ]);
+
+    return response;
   }
 
   getStatusText(statusCode) {
