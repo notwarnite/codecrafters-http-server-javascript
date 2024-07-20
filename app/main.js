@@ -122,8 +122,6 @@ class HTTPServer {
     if (useGzip) {
       responseBody = zlib.gzipSync(responseBody);
       responseHeaders += "Content-Encoding: gzip\r\n";
-    } else {
-      responseBody = Buffer.from(responseBody);
     }
 
     const contentLength = Buffer.byteLength(responseBody);
@@ -176,8 +174,14 @@ class HTTPServer {
   }
 
   sendResponse(socket, response) {
-    socket.write(response, () => {
-      socket.end();
+    const responseBodyStart = response.indexOf("\r\n\r\n") + 4;
+    const responseHeaders = response.substring(0, responseBodyStart);
+    const responseBody = response.substring(responseBodyStart);
+
+    socket.write(responseHeaders, () => {
+      socket.write(Buffer.from(responseBody, "binary"), () => {
+        socket.end();
+      });
     });
   }
 }
