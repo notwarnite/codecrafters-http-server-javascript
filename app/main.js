@@ -1,8 +1,11 @@
 const net = require("net");
+const fs = require("fs").promises;
+const path = require("path");
 
 class HTTPServer {
   constructor(port) {
     this.port = port;
+    this.directory = directory;
     this.server = net.createServer(this.handleConnection.bind(this));
   }
 
@@ -33,7 +36,7 @@ class HTTPServer {
     });
   }
 
-  processRequest(socket, request) {
+  async processRequest(socket, request) {
     const { path, userAgent } = this.parseRequest(request);
     const response = this.createResponse(path, userAgent);
     this.sendResponse(socket, response);
@@ -56,7 +59,7 @@ class HTTPServer {
     return { path, userAgent };
   }
 
-  createResponse(path, userAgent) {
+  async createResponse(path, userAgent) {
     if (path === "/") {
       return "HTTP/1.1 200 OK\r\n\r\n";
     } else if (path.startsWith("/echo/")) {
@@ -66,8 +69,28 @@ class HTTPServer {
     } else if (path === "/user-agent") {
       const contentLength = Buffer.byteLength(userAgent, "utf8");
       return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
+    } else if (requestPath.startsWith("/files/")) {
+      return await this.handleFileRequest(requestPath);
     } else {
       return "HTTP/1.1 404 Not Found\r\n\r\n";
+    }
+  }
+
+  async handleFileRequest(requestPath) {
+    const filename = requestPath.substring("/files/".length);
+    const filePath = path.join(this.directory, filename);
+
+    try {
+      const fileContent = await fs.readFile(filePath);
+      const contentLength = fileContent.length;
+      return `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${contentLength}\r\n\r\n${fileContent}`;
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        return "HTTP/1.1 404 Not Found\r\n\r\n";
+      } else {
+        console.error("Error reading file:", error);
+        return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+      }
     }
   }
 
