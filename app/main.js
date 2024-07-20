@@ -21,7 +21,7 @@ class HTTPServer {
 
     socket.on("data", (data) => {
       request += data.toString();
-      if (request.includes("\r\n\r\n")) {
+      if (this.isCompleteRequest(request)) {
         this.processRequest(socket, request);
         request = "";
       }
@@ -36,10 +36,21 @@ class HTTPServer {
     });
   }
 
+  isCompleteRequest(request) {
+    const [headers, body] = request.split("\r\n\r\n");
+    if (!headers || !body) return false;
+
+    const contentLengthMatch = headers.match(/Content-Length: (\d+)/);
+    if (!contentLengthMatch) return request.includes("\r\n\r\n");
+
+    const contentLength = parseInt(contentLengthMatch[1], 10);
+    return body.length >= contentLength;
+  }
+
   async processRequest(socket, request) {
-    const { path, userAgent } = this.parseRequest(request);
+    const { method, path, headers, body } = this.parseRequest(request);
     try {
-      const response = await this.createResponse(path, userAgent);
+      const response = await this.createResponse(method, path, headers, body);
       this.sendResponse(socket, response);
     } catch (error) {
       console.error("Error processing request:", error);
@@ -48,37 +59,40 @@ class HTTPServer {
   }
 
   parseRequest(request) {
-    const lines = request.split("\r\n");
-    const requestLine = lines[0];
-    const headers = lines.slice(1, -2);
+    const [requestLine, ...rest] = request.split("\r\n");
+    const [method, path] = requestLine.split(" ");
+    const [headersPart, body] = rest.join("\r\n").split("\r\n\r\n");
+    const headers = Object.fromEntries(
+      headersPart.split("\r\n").map((line) => {
+        const [key, value] = line.split(": ");
+        return [key.toLowerCase(), value];
+      })
+    );
 
-    const path = requestLine.split(" ")[1];
-    const userAgent =
-      headers
-        .find((header) => header.startsWith("User-Agent: "))
-        ?.substring("User-Agent: ".length) || "";
-
-    console.log(`Received request for path: ${path}`);
-    console.log(`Received User-Agent: ${userAgent}`);
-
-    return { path, userAgent };
+    console.log(`Received ${method} request for path: ${path}`);
+    return { method, path, headers, body };
   }
 
-  async createResponse(path, userAgent) {
-    if (path === "/") {
-      return "HTTP/1.1 200 OK\r\n\r\n";
-    } else if (path.startsWith("/echo/")) {
-      const echoStr = path.substring("/echo/".length);
-      const contentLength = Buffer.byteLength(echoStr, "utf8");
-      return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${echoStr}`;
-    } else if (path === "/user-agent") {
-      const contentLength = Buffer.byteLength(userAgent, "utf8");
-      return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
-    } else if (path.startsWith("/files/")) {
-      return await this.handleFileRequest(path);
-    } else {
-      return "HTTP/1.1 404 Not Found\r\n\r\n";
+  async createResponse(method, path, headers, body) {
+    if (method === "GET") {
+      if (path === "/") {
+        return "HTTP/1.1 200 OK\r\n\r\n";
+      } else if (path.startsWith("/echo/")) {
+        const echoStr = path.substring("/echo/".length);
+        const contentLength = Buffer.byteLength(echoStr, "utf8");
+        return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${echoStr}`;
+      } else if (path === "/user-agent") {
+        const userAgent = headers["user-agent"] || "";
+        const contentLength = Buffer.byteLength(userAgent, "utf8");
+        return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
+      } else if (path.startsWith("/files/")) {
+        return await this.handleFileRequest(path);
+      }
+    } else if (method === "POST" && path.startsWith("/files/")) {
+      return await this.handleFileCreation(path, body);
     }
+
+    return "HTTP/1.1 404 Not Found\r\n\r\n";
   }
 
   async handleFileRequest(requestPath) {
@@ -96,6 +110,19 @@ class HTTPServer {
         console.error("Error reading file:", error);
         return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
       }
+    }
+  }
+
+  async handleFileCreation(requestPath, content) {
+    const filename = requestPath.substring("/files/".length);
+    const filePath = path.join(this.directory, filename);
+
+    try {
+      await fs.writeFile(filePath, content);
+      return "HTTP/1.1 201 Created\r\n\r\n";
+    } catch (error) {
+      console.error("Error creating file:", error);
+      return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
     }
   }
 
