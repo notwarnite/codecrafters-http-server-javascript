@@ -38,8 +38,13 @@ class HTTPServer {
 
   async processRequest(socket, request) {
     const { path, userAgent } = this.parseRequest(request);
-    const response = this.createResponse(path, userAgent);
-    this.sendResponse(socket, response);
+    try {
+      const response = await this.createResponse(path, userAgent);
+      this.sendResponse(socket, response);
+    } catch (error) {
+      console.error("Error processing request:", error);
+      this.sendResponse(socket, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
+    }
   }
 
   parseRequest(request) {
