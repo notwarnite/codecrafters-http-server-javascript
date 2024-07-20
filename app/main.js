@@ -117,7 +117,8 @@ class HTTPServer {
     const acceptedEncodings = acceptEncoding
       .split(",")
       .map((encoding) => encoding.trim().toLowerCase());
-    const useGzip = acceptedEncodings.includes("gzip");
+    const useGzip =
+      acceptedEncodings.includes("gzip") || acceptEncoding.includes("gzip");
     if (useGzip) {
       responseBody = zlib.gzipSync(responseBody);
       responseHeaders += "Content-Encoding: gzip\r\n";
