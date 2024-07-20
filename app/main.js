@@ -114,11 +114,10 @@ class HTTPServer {
 
     // Check if the client accepts gzip encoding
     const acceptEncoding = headers["accept-encoding"] || "";
-    const acceptedEncodings = acceptEncoding
-      .split(",")
-      .map((encoding) => encoding.trim().toLowerCase());
-    const useGzip = acceptedEncodings.includes("gzip");
-
+    // const acceptedEncodings = acceptEncoding
+    //   .split(",")
+    //   .map((encoding) => encoding.trim().toLowerCase());
+    const useGzip = acceptEncoding.includes("gzip");
     if (useGzip) {
       responseBody = zlib.gzipSync(responseBody);
       responseHeaders += "Content-Encoding: gzip\r\n";
@@ -174,14 +173,8 @@ class HTTPServer {
   }
 
   sendResponse(socket, response) {
-    const responseBodyStart = response.indexOf("\r\n\r\n") + 4;
-    const responseHeaders = response.substring(0, responseBodyStart);
-    const responseBody = response.substring(responseBodyStart);
-
-    socket.write(responseHeaders, () => {
-      socket.write(Buffer.from(responseBody, "binary"), () => {
-        socket.end();
-      });
+    socket.write(response, () => {
+      socket.end();
     });
   }
 }
