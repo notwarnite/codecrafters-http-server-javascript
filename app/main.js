@@ -1,6 +1,7 @@
 const net = require("net");
 const fs = require("fs").promises;
 const path = require("path");
+const zlib = require("zlib");
 
 class HTTPServer {
   constructor(port, directory) {
@@ -75,30 +76,67 @@ class HTTPServer {
 
     console.log(`Received ${method} request for path: ${path}`);
     console.log(`Received User-Agent: ${headers["user-agent"] || ""}`);
+    console.log(
+      `Received Accept-Encoding: ${headers["accept-encoding"] || ""}`
+    );
 
     return { method, path, headers, body };
   }
 
   async createResponse(method, path, headers, body) {
+    let responseBody = "";
+    let responseHeaders = "";
+    let statusCode = 200;
+
     if (method === "GET") {
       if (path === "/") {
-        return "HTTP/1.1 200 OK\r\n\r\n";
+        responseBody = "";
       } else if (path.startsWith("/echo/")) {
-        const echoStr = path.substring("/echo/".length);
-        const contentLength = Buffer.byteLength(echoStr, "utf8");
-        return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${echoStr}`;
+        responseBody = path.substring("/echo/".length);
+        responseHeaders += "Content-Type: text/plain\r\n";
       } else if (path === "/user-agent") {
-        const userAgent = headers["user-agent"] || "";
-        const contentLength = Buffer.byteLength(userAgent, "utf8");
-        return `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
+        responseBody = headers["user-agent"] || "";
+        responseHeaders += "Content-Type: text/plain\r\n";
       } else if (path.startsWith("/files/")) {
-        return await this.handleFileRequest(path);
+        const fileResponse = await this.handleFileRequest(path);
+        return fileResponse; // File responses are handled separately
+      } else {
+        statusCode = 404;
+        responseBody = "Not Found";
       }
     } else if (method === "POST" && path.startsWith("/files/")) {
-      return await this.handleFileUpload(path, body);
+      const fileUploadResponse = await this.handleFileUpload(path, body);
+      return fileUploadResponse; // File upload responses are handled separately
+    } else {
+      statusCode = 404;
+      responseBody = "Not Found";
     }
 
-    return "HTTP/1.1 404 Not Found\r\n\r\n";
+    // Check if the client accepts gzip encoding
+    const acceptEncoding = headers["accept-encoding"] || "";
+    const useGzip = acceptEncoding.includes("gzip");
+
+    if (useGzip) {
+      responseBody = zlib.gzipSync(responseBody);
+      responseHeaders += "Content-Encoding: gzip\r\n";
+    }
+
+    const contentLength = Buffer.byteLength(responseBody);
+    responseHeaders += `Content-Length: ${contentLength}\r\n`;
+
+    return `HTTP/1.1 ${statusCode} ${this.getStatusText(
+      statusCode
+    )}\r\n${responseHeaders}\r\n${responseBody}`;
+  }
+
+  getStatusText(statusCode) {
+    const statusTexts = {
+      200: "OK",
+      201: "Created",
+      404: "Not Found",
+      500: "Internal Server Error",
+    };
+    return statusTexts[statusCode] || "";
   }
 
   async handleFileRequest(requestPath) {
