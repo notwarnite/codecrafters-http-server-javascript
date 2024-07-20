@@ -9,26 +9,28 @@ const server = net.createServer((socket) => {
 
     const lines = request.split("\r\n");
     const requestLine = lines[0];
-    const parts = requestLine.split(" ");
-    const method = parts[0];
-    const path = parts[1];
+    const headers = lines.slice(1, lines.length - 2);
 
-    console.log(`Received request: ${method} ${path}`);
+    let userAgent = "";
+    for (let header of headers) {
+      if (header.startsWith("User-Agent: ")) {
+        userAgent = header.substring("User-Agent: ".length);
+        break;
+      }
+    }
+
+    console.log(`Received User-Agent: ${userAgent}`);
 
     let response;
-    if (path.startsWith("/user-agent")) {
-      const header = lines[1];
-      const userAgent = header.split(":")[1].trim();
-      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(
-        userAgent,
-        "utf8"
-      )}\r\n\r\n${userAgent}`;
-    } else if (path.startsWith("/echo/")) {
-      const echoStr = path.substring("/echo/".length);
-      const contentLength = Buffer.byteLength(echoStr, "utf8");
+    if (requestLine.includes("/user-agent")) {
+      const contentLength = Buffer.byteLength(userAgent, "utf8");
 
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${userAgent}`;
+    } else if (requestLine.includes("/echo/")) {
+      const echoStr = requestLine.split(" ")[1].substring("/echo/".length);
+      const contentLength = Buffer.byteLength(echoStr, "utf8");
       response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${contentLength}\r\n\r\n${echoStr}`;
-    } else if (path === "/") {
+    } else if (requestLine.includes("/")) {
       response = "HTTP/1.1 200 OK\r\n\r\n";
     } else {
       response = "HTTP/1.1 404 Not Found\r\n\r\n";
