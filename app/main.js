@@ -114,7 +114,10 @@ class HTTPServer {
 
     // Check if the client accepts gzip encoding
     const acceptEncoding = headers["accept-encoding"] || "";
-    const useGzip = acceptEncoding.includes("gzip");
+    const acceptedEncodings = acceptEncoding
+      .split(",")
+      .map((encoding) => encoding.trim().toLowerCase());
+    const useGzip = acceptedEncodings.includes("gzip");
 
     if (useGzip) {
       responseBody = zlib.gzipSync(responseBody);
