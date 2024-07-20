@@ -119,17 +119,23 @@ class HTTPServer {
       .map((encoding) => encoding.trim().toLowerCase());
     const useGzip =
       acceptedEncodings.includes("gzip") || acceptEncoding.includes("gzip");
+
     if (useGzip) {
       responseBody = zlib.gzipSync(responseBody);
       responseHeaders += "Content-Encoding: gzip\r\n";
+    } else {
+      responseBody = Buffer.from(responseBody); // Ensure responseBody is a Buffer
     }
 
-    const contentLength = Buffer.byteLength(responseBody);
+    const contentLength = responseBody.length;
     responseHeaders += `Content-Length: ${contentLength}\r\n`;
+
+    // Convert responseBody to a string if it's not already
+    responseBody = responseBody.toString("binary");
 
     return `HTTP/1.1 ${statusCode} ${this.getStatusText(
       statusCode
-    )}\r\n${responseHeaders}\r\n${responseBody}`;
+    )}\r\n${responseHeaders}\r\n\r\n${responseBody}`;
   }
 
   getStatusText(statusCode) {
